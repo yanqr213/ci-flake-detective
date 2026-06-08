@@ -4,7 +4,7 @@ import unittest
 from pathlib import Path
 
 from ci_flake_detective.cli import main
-from ci_flake_detective.reporters import render_markdown, write_reports
+from ci_flake_detective.reporters import render_markdown, render_sarif, write_reports
 from ci_flake_detective.analyzer import analyze_runs
 from ci_flake_detective.models import DetectiveConfig, RunRecord, TestCaseRecord
 
@@ -31,9 +31,9 @@ class ReporterCliTests(unittest.TestCase):
 
     def test_write_reports_all_formats(self):
         with tempfile.TemporaryDirectory() as temp:
-            paths = write_reports(sample_report(), temp, ["md", "json", "csv"])
+            paths = write_reports(sample_report(), temp, ["md", "json", "csv", "sarif"])
             names = {path.name for path in paths}
-            self.assertEqual({"ci-flake-report.md", "ci-flake-report.json", "ci-flake-report.csv"}, names)
+            self.assertEqual({"ci-flake-report.md", "ci-flake-report.json", "ci-flake-report.csv", "ci-flake-report.sarif"}, names)
 
     def test_json_report_is_valid(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -46,6 +46,14 @@ class ReporterCliTests(unittest.TestCase):
             write_reports(sample_report(), temp, ["csv"])
             text = (Path(temp) / "ci-flake-report.csv").read_text(encoding="utf-8")
         self.assertTrue(text.startswith("test_id,category"))
+
+    def test_sarif_report_contains_insight_result(self):
+        data = json.loads(render_sarif(sample_report()))
+        run = data["runs"][0]
+        self.assertEqual(data["version"], "2.1.0")
+        self.assertEqual(run["tool"]["driver"]["name"], "ci-flake-detective")
+        self.assertEqual(run["results"][0]["ruleId"], "ci-flake.flaky")
+        self.assertIn(run["results"][0]["level"], {"warning", "note"})
 
     def test_cli_show_default_config(self):
         self.assertEqual(0, main(["show-default-config"]))
@@ -76,6 +84,12 @@ class ReporterCliTests(unittest.TestCase):
             self.assertTrue((Path(temp) / "ci-flake-report.json").exists())
             self.assertFalse((Path(temp) / "ci-flake-report.md").exists())
 
+    def test_cli_analyze_sarif_format(self):
+        with tempfile.TemporaryDirectory() as temp:
+            main(["analyze", "--junit", str(EXAMPLE / "junit"), "--output-dir", temp, "--format", "sarif", "--quiet"])
+            data = json.loads((Path(temp) / "ci-flake-report.sarif").read_text(encoding="utf-8"))
+        self.assertEqual(data["runs"][0]["tool"]["driver"]["name"], "ci-flake-detective")
+
     def test_cli_strict_uses_flaky_exit(self):
         with tempfile.TemporaryDirectory() as temp:
             code = main([
@@ -99,4 +113,3 @@ class ReporterCliTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

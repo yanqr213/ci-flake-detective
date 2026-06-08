@@ -1,6 +1,6 @@
 # ci-flake-detective
 
-`ci-flake-detective` 是一个面向 CI 与测试治理的开源 DevTools 工具。它读取多次 CI run 导出的 JUnit XML、日志片段、测试时长 CSV/JSON，识别 flaky test、真实回归、环境型失败、超时漂移、重试有效性与影响范围，并输出 Markdown、JSON、CSV 报告和可用于 CI gate 的退出码。
+`ci-flake-detective` 是一个面向 CI 与测试治理的开源 DevTools 工具。它读取多次 CI run 导出的 JUnit XML、日志片段、测试时长 CSV/JSON，识别 flaky test、真实回归、环境型失败、超时漂移、重试有效性与影响范围，并输出 Markdown、JSON、CSV、SARIF 报告和可用于 CI gate 的退出码。
 
 项目优先使用 Python 标准库，兼容 Python 3.9+，提供 CLI 与可导入 API。适用于 GitHub Actions、pytest/unittest/JUnit、Playwright、Node 测试等团队。
 
@@ -11,7 +11,7 @@
 - 检测 Playwright 或端到端测试的超时漂移。
 - 识别 runner、网络、依赖服务、磁盘空间等环境型失败。
 - 判断 retry 是否真的把失败修复为通过。
-- 输出结构化 JSON/CSV 给数据平台，输出 Markdown 给 PR 或构建摘要。
+- 输出结构化 JSON/CSV 给数据平台，输出 Markdown 给 PR 或构建摘要，输出 SARIF 给 GitHub Code Scanning。
 
 ## 安装
 
@@ -43,6 +43,7 @@ ci-flake-detective analyze \
 - `reports/ci-flake-report.md`
 - `reports/ci-flake-report.json`
 - `reports/ci-flake-report.csv`
+- `reports/ci-flake-report.sarif`（显式传入 `--format sarif` 时生成）
 
 默认退出码策略：
 
@@ -64,7 +65,7 @@ ci-flake-detective analyze \
   --durations path/to/durations.csv \
   --config config.json \
   --output-dir reports \
-  --format md --format json --format csv
+  --format md --format json --format csv --format sarif
 ```
 
 参数说明：
@@ -74,7 +75,7 @@ ci-flake-detective analyze \
 - `--durations`: 可选。测试时长历史 CSV/JSON 文件或目录。
 - `--config`: 可选。JSON 配置文件。
 - `--output-dir`: 可选。报告输出目录，默认 `reports`。
-- `--format`: 可选。可重复传入 `md`、`json`、`csv`；默认三者都输出。
+- `--format`: 可选。可重复传入 `md`、`json`、`csv`、`sarif`；默认输出 `md/json/csv`。
 - `--strict`: 可选。临时开启 flaky、环境失败、时长漂移门禁。
 - `--quiet`: 可选。减少 stdout 输出。
 
@@ -262,6 +263,8 @@ JSON 与 CSV 中每条 insight 包含：
 - `affected_area`: 从文件路径或 classname 推断的影响范围。
 - `examples`: 失败消息摘录。
 
+SARIF 输出会把非 `stable` insight 映射为 Code Scanning result：`new_regression` 是 `error`，`flaky`、`environment_failure`、`timeout_failure` 是 `warning`，`duration_drift`、`slow` 等是 `note`。这适合在 GitHub 的安全/质量视图里集中查看测试治理问题。
+
 ## GitHub Actions 集成
 
 基础用法：
@@ -283,12 +286,32 @@ jobs:
           python-version: "3.12"
       - run: python -m pip install -e .
       - run: pytest --junitxml=artifacts/junit.xml
-      - run: ci-flake-detective analyze --junit artifacts --output-dir reports
+      - run: ci-flake-detective analyze --junit artifacts --output-dir reports --format md --format json --format sarif
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: ci-flake-report
           path: reports
+```
+
+上传 SARIF 到 GitHub Code Scanning：
+
+```yaml
+permissions:
+  contents: read
+  security-events: write
+
+steps:
+  - uses: actions/checkout@v4
+  - uses: actions/setup-python@v5
+    with:
+      python-version: "3.12"
+  - run: python -m pip install git+https://github.com/yanqr213/ci-flake-detective.git
+  - run: ci-flake-detective analyze --junit artifacts --output-dir reports --format sarif
+  - uses: github/codeql-action/upload-sarif@v3
+    if: always()
+    with:
+      sarif_file: reports/ci-flake-report.sarif
 ```
 
 如果只想在新回归时失败，使用默认配置即可。如果希望 flaky、环境失败、时长漂移也让 CI 失败：
@@ -320,7 +343,7 @@ ci-flake-detective analyze --junit examples/junit --logs examples/logs --duratio
 - `src/ci_flake_detective/models.py`: 数据模型和默认配置。
 - `src/ci_flake_detective/parsers.py`: JUnit、日志、时长输入解析。
 - `src/ci_flake_detective/analyzer.py`: 历史聚合与判定规则。
-- `src/ci_flake_detective/reporters.py`: Markdown、JSON、CSV 输出。
+- `src/ci_flake_detective/reporters.py`: Markdown、JSON、CSV、SARIF 输出。
 - `src/ci_flake_detective/cli.py`: 命令行入口。
 - `tests/`: unittest 测试套件。
 - `examples/`: 可直接运行的样例数据。
@@ -328,7 +351,7 @@ ci-flake-detective analyze --junit examples/junit --logs examples/logs --duratio
 
 ## English
 
-`ci-flake-detective` is an open-source DevTools project for CI and test governance. It reads JUnit XML files, log fragments, and duration history exported from repeated CI runs, then detects flaky tests, new regressions, environment failures, timeout failures, duration drift, retry effectiveness, and affected areas. It writes Markdown, JSON, and CSV reports and returns CI-friendly exit codes.
+`ci-flake-detective` is an open-source DevTools project for CI and test governance. It reads JUnit XML files, log fragments, and duration history exported from repeated CI runs, then detects flaky tests, new regressions, environment failures, timeout failures, duration drift, retry effectiveness, and affected areas. It writes Markdown, JSON, CSV, and SARIF reports and returns CI-friendly exit codes.
 
 The project prefers the Python standard library, supports Python 3.9+, and provides both a CLI and an importable API.
 
@@ -339,7 +362,7 @@ The project prefers the Python standard library, supports Python 3.9+, and provi
 - Detect Playwright or end-to-end timeout drift.
 - Classify network, runner, service, dependency, and disk-related failures.
 - Measure whether retries actually turn failures into passes.
-- Send JSON/CSV to data systems and Markdown to build summaries.
+- Send JSON/CSV to data systems, Markdown to build summaries, and SARIF to GitHub Code Scanning.
 
 ### Installation
 
@@ -362,6 +385,7 @@ Outputs:
 - `reports/ci-flake-report.md`
 - `reports/ci-flake-report.json`
 - `reports/ci-flake-report.csv`
+- `reports/ci-flake-report.sarif` when `--format sarif` is requested
 
 ### CLI
 
@@ -378,7 +402,7 @@ Analyze options:
 - `--durations`: Optional CSV/JSON duration history files or directories.
 - `--config`: Optional JSON config file.
 - `--output-dir`: Report output directory, default `reports`.
-- `--format`: Repeatable output format: `md`, `json`, `csv`.
+- `--format`: Repeatable output format: `md`, `json`, `csv`, `sarif`.
 - `--strict`: Fail CI on flaky, environment, and duration-drift findings too.
 - `--quiet`: Suppress summary output.
 
@@ -421,11 +445,13 @@ Duration CSV accepts `test_id`, `name`, or `test` as the test key and `duration`
 
 Each insight includes `test_id`, `category`, `severity`, `latest_status`, failure/pass/run counts, `log_category`, `reasons`, retry data, duration baseline and drift values, `affected_area`, and example failure snippets.
 
+SARIF maps non-stable insights into Code Scanning results, with new regressions as `error`, flaky/environment/timeout findings as `warning`, and duration/slow-test findings as `note`.
+
 ### CI Integration
 
 ```yaml
 - run: pytest --junitxml=artifacts/junit.xml
-- run: ci-flake-detective analyze --junit artifacts --output-dir reports
+- run: ci-flake-detective analyze --junit artifacts --output-dir reports --format md --format json --format sarif
 - uses: actions/upload-artifact@v4
   if: always()
   with:
@@ -459,4 +485,3 @@ ci-flake-detective analyze --junit examples/junit --logs examples/logs --duratio
 ```
 
 The code lives under `src/ci_flake_detective`, tests under `tests`, examples under `examples`, and GitHub Actions CI under `.github/workflows/ci.yml`.
-

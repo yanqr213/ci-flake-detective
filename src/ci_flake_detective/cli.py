@@ -50,7 +50,7 @@ def build_parser() -> argparse.ArgumentParser:
     analyze.add_argument(
         "--format",
         action="append",
-        choices=["md", "markdown", "json", "csv"],
+        choices=["md", "markdown", "json", "csv", "sarif"],
         default=[],
         help="Report format. Repeatable. Defaults to md/json/csv.",
     )
@@ -100,4 +100,3 @@ def _print_summary(summary: dict, written: List[Path], code: int) -> None:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

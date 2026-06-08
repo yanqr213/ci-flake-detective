@@ -25,5 +25,6 @@ jobs:
             --junit examples/junit \
             --logs examples/logs \
             --durations examples/durations \
-            --output-dir reports || test $? -eq 2
-
+            --output-dir reports \
+            --format md --format json --format csv --format sarif || test $? -eq 2
+          python -m json.tool reports/ci-flake-report.sarif > /dev/null

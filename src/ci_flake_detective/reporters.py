@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import csv
+import hashlib
 import json
 from pathlib import Path
-from typing import Iterable, List
+from typing import Any, Dict, Iterable, List
 
+from . import __version__
 from .models import AnalysisReport, TestInsight
 
 
@@ -47,6 +49,10 @@ def write_reports(report: AnalysisReport, output_dir: str, formats: Iterable[str
         path = out / "ci-flake-report.md"
         write_markdown(report, path)
         written.append(path)
+    if "sarif" in wanted:
+        path = out / "ci-flake-report.sarif"
+        write_sarif(report, path)
+        written.append(path)
     return written
 
 
@@ -69,6 +75,10 @@ def write_csv(report: AnalysisReport, path: Path) -> None:
 
 def write_markdown(report: AnalysisReport, path: Path) -> None:
     path.write_text(render_markdown(report), encoding="utf-8")
+
+
+def write_sarif(report: AnalysisReport, path: Path) -> None:
+    path.write_text(render_sarif(report), encoding="utf-8")
 
 
 def render_markdown(report: AnalysisReport) -> str:
@@ -133,3 +143,123 @@ def _insight_row(insight: TestInsight) -> str:
 def _md(value: str) -> str:
     return str(value).replace("|", "\\|").replace("\n", " ")
 
+
+def render_sarif(report: AnalysisReport) -> str:
+    findings = [insight for insight in report.insights if insight.category != "stable"]
+    sarif = {
+        "version": "2.1.0",
+        "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+        "runs": [
+            {
+                "tool": {
+                    "driver": {
+                        "name": "ci-flake-detective",
+                        "semanticVersion": __version__,
+                        "informationUri": "https://github.com/yanqr213/ci-flake-detective",
+                        "rules": _sarif_rules(findings),
+                    }
+                },
+                "automationDetails": {"id": "ci-flake-detective"},
+                "results": [_insight_to_sarif(insight) for insight in findings],
+                "properties": {
+                    "summary": report.summary,
+                    "exitCode": report.exit_code(),
+                    "generatedBy": report.generated_by,
+                },
+            }
+        ],
+    }
+    return json.dumps(sarif, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
+
+
+def _sarif_rules(insights: List[TestInsight]) -> List[Dict[str, Any]]:
+    categories = sorted({insight.category for insight in insights})
+    return [
+        {
+            "id": _rule_id(category),
+            "name": category.replace("_", " ").title(),
+            "shortDescription": {"text": f"CI test insight: {category}."},
+            "fullDescription": {"text": _rule_help(category)},
+            "defaultConfiguration": {"level": _level_for_category(category)},
+            "help": {"text": _rule_help(category), "markdown": _rule_help(category)},
+            "properties": {
+                "precision": "medium",
+                "tags": ["ci", "flaky-tests", "junit", "test-governance", category],
+            },
+        }
+        for category in categories
+    ]
+
+
+def _insight_to_sarif(insight: TestInsight) -> Dict[str, Any]:
+    message = (
+        f"{insight.test_id}: {insight.category} ({insight.severity}). "
+        f"Latest status {insight.latest_status}; failures/passes {insight.failure_count}/{insight.pass_count}. "
+        f"{'; '.join(insight.reasons)}"
+    )
+    return {
+        "ruleId": _rule_id(insight.category),
+        "level": _level_for_category(insight.category),
+        "message": {"text": _trim(message, 800)},
+        "locations": [_location_for_insight(insight)],
+        "partialFingerprints": {
+            "ciFlakeDetective/v1": hashlib.sha256(f"{insight.test_id}|{insight.category}|{insight.affected_area}".encode("utf-8")).hexdigest()[:32]
+        },
+        "properties": insight.to_dict(),
+    }
+
+
+def _location_for_insight(insight: TestInsight) -> Dict[str, Any]:
+    uri = _artifact_uri(insight.affected_area)
+    return {
+        "physicalLocation": {
+            "artifactLocation": {"uri": uri},
+            "region": {"startLine": 1},
+        },
+        "logicalLocations": [
+            {
+                "name": insight.test_id,
+                "fullyQualifiedName": insight.test_id,
+                "kind": "function",
+            }
+        ],
+    }
+
+
+def _artifact_uri(value: str) -> str:
+    if value and value != "unknown":
+        return value.replace("\\", "/")
+    return "ci-test-history"
+
+
+def _rule_id(category: str) -> str:
+    return f"ci-flake.{category or 'unknown'}"
+
+
+def _level_for_category(category: str) -> str:
+    if category == "new_regression":
+        return "error"
+    if category in {"flaky", "environment_failure", "timeout_failure"}:
+        return "warning"
+    return "note"
+
+
+def _rule_help(category: str) -> str:
+    help_text = {
+        "new_regression": "The latest CI observation failed after enough prior passes. Treat this as a likely pull-request regression.",
+        "flaky": "The test has both passing and failing observations across history. Stabilize or quarantine before relying on it as a gate.",
+        "environment_failure": "The latest failure matched infrastructure, network, runner, disk, or service patterns.",
+        "timeout_failure": "The latest failure matched timeout patterns. Investigate deadlocks, slow dependencies, or test time budgets.",
+        "duration_drift": "The latest duration exceeded both ratio and absolute drift thresholds compared with history.",
+        "slow": "The test exceeded the configured slow-test threshold.",
+        "retry_effective": "A failed attempt later passed in the same run, indicating retry sensitivity.",
+        "failure": "The latest observation failed but did not match a more specific category.",
+    }
+    return help_text.get(category, "Review this CI test insight and decide whether to fix, quarantine, or update thresholds.")
+
+
+def _trim(text: str, limit: int) -> str:
+    compact = " ".join(text.split())
+    if len(compact) <= limit:
+        return compact
+    return compact[:limit].rstrip() + "..."
