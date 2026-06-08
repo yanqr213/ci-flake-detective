@@ -1,0 +1,21 @@
+{
+  "flaky_min_runs": 3,
+  "flaky_min_failures": 1,
+  "flaky_requires_pass_and_fail": true,
+  "regression_min_prior_passes": 2,
+  "duration_drift_factor": 1.8,
+  "duration_drift_seconds": 5.0,
+  "slow_test_seconds": 60.0,
+  "retry_effective_min_attempts": 2,
+  "fail_on_new_regression": true,
+  "fail_on_flaky": true,
+  "fail_on_environment": true,
+  "fail_on_duration_drift": true,
+  "log_patterns": {
+    "environment": ["ECONNRESET", "temporarily unavailable", "No space left on device"],
+    "timeout": ["timeout", "timed out", "TimeoutError"],
+    "assertion": ["AssertionError", "expected", "actual"],
+    "dependency": ["ModuleNotFoundError", "Cannot find module", "npm ERR!"]
+  }
+}
+

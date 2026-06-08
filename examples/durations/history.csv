@@ -1,0 +1,8 @@
+test_id,duration
+tests.search::test_index_rebuild,7.8
+tests.search::test_index_rebuild,8.1
+tests.search::test_index_rebuild,8.6
+tests.search::test_index_rebuild,22.0
+tests.playwright::test_login_ui,8.8
+tests.playwright::test_login_ui,9.2
+

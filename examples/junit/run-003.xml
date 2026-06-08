@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="checkout" tests="7" failures="2" errors="1" skipped="0">
+  <testcase classname="tests.checkout" name="test_pay_success" file="checkout/test_pay.py" time="1.1" />
+  <testcase classname="tests.checkout" name="test_coupon_edge" file="checkout/test_coupon.py" time="1.9" />
+  <testcase classname="tests.api" name="test_user_profile" file="api/test_user.py" time="0.8">
+    <failure message="AssertionError: expected 200 actual 500">AssertionError: expected 200 actual 500</failure>
+  </testcase>
+  <testcase classname="tests.playwright" name="test_login_ui" file="web/test_login.spec.ts" time="8.5" />
+  <testcase classname="tests.worker" name="test_background_sync" file="worker/test_sync.py" time="3.2">
+    <error message="ECONNRESET while calling staging redis">connection reset by peer</error>
+  </testcase>
+  <testcase classname="tests.search" name="test_index_rebuild" file="search/test_index.py" time="22.0" />
+  <testcase classname="tests.retry" name="test_retryable_job" file="worker/test_retry.py" time="1.0" attempt="1">
+    <failure message="AssertionError: transient queue length">AssertionError: transient queue length</failure>
+  </testcase>
+  <testcase classname="tests.retry" name="test_retryable_job" file="worker/test_retry.py" time="1.1" attempt="2" />
+</testsuite>
+

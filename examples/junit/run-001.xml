@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="checkout" tests="6" failures="1" errors="0" skipped="0">
+  <testcase classname="tests.checkout" name="test_pay_success" file="checkout/test_pay.py" time="1.2" />
+  <testcase classname="tests.checkout" name="test_coupon_edge" file="checkout/test_coupon.py" time="2.0">
+    <failure message="AssertionError: expected discount to equal 20">AssertionError: expected 20 actual 10</failure>
+  </testcase>
+  <testcase classname="tests.api" name="test_user_profile" file="api/test_user.py" time="0.8" />
+  <testcase classname="tests.playwright" name="test_login_ui" file="web/test_login.spec.ts" time="9.0" />
+  <testcase classname="tests.worker" name="test_background_sync" file="worker/test_sync.py" time="3.1" />
+  <testcase classname="tests.search" name="test_index_rebuild" file="search/test_index.py" time="8.0" />
+</testsuite>
+

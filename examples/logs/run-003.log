@@ -1,0 +1,3 @@
+tests.worker::test_background_sync failed because staging redis returned ECONNRESET.
+Runner note: dependency service was temporarily unavailable and recovered after the job finished.
+
